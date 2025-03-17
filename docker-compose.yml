@@ -1,0 +1,57 @@
+version: "3"
+
+services:
+  nats-server:
+    image: nats:latest
+    ports:
+      - "8222:8222"
+
+  client-gateway:
+    build: ./client-gateway # Ejecuta el dockerfile para construir la imagen
+    ports:
+      - ${CLIENT_GATEWAY_PORT}:3000 #  Puerto Ordenador : Puerto Container
+    volumes:
+      - ./client-gateway/src:/usr/src/app/src
+    command: npm run start:dev
+    environment:
+      - PORT=3000
+      - NATS_SERVERS=nats://nats-server:4222
+
+  products-ms:
+    build: ./products-microservice # Ejecuta el dockerfile  para construir la imagen
+    # ports:          # No hacen falta los Puertos para acceder a la aplicación (la comunicación es interna)
+    # - "3001:3001"
+    volumes:
+      - ./products-microservice/src:/usr/src/app/src
+    command: npm run start:dev
+    environment:
+      - PORT=3001
+      - NATS_SERVERS=nats://nats-server:4222
+      - DATABASE_URL=file:./dev.db # SQLite
+
+  orders-ms:
+    depends_on:
+      - orders-db
+    build: ./orders-microservice # Ejecuta el dockerfile  para construir la imagen
+    # ports:          # No hacen falta los Puertos para acceder a la aplicación (la comunicación es interna)
+    #   - "3002:3002"
+    volumes:
+      - ./orders-microservice/src:/usr/src/app/src
+    command: npm run start:dev
+    environment:
+      - PORT=3002
+      - NATS_SERVERS=nats://nats-server:4222
+      - DATABASE_URL=postgresql://postgres:123456@orders-db:5432/ordersdb?schema=public
+
+  orders-db:
+    container_name: orders_database
+    image: postgres:16.2
+    restart: always
+    volumes:
+      - ./orders-microservice/postgres:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=123456
+      - POSTGRES_DB=ordersdb
